@@ -86,6 +86,7 @@ class Client:
         msg_out = int.from_bytes(data, byteorder='big')
         print("Number for " + msg_in + ": ")  # print the result
         print(msg_out)
+        return msg_out
 
     def call_all(self, msg_in="1"):
         """ get all numbers- call server """
@@ -95,6 +96,7 @@ class Client:
         data = self.sock.recv(1024)  # receive the response
         msg_out = data.decode('ascii')
         print(msg_out)  # print the result
+        return msg_out
 
     def close(self):
         """ Close socket """
