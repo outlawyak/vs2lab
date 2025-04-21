@@ -10,6 +10,10 @@ cl.run()
 
 base_list = rpc.DBList({'foo'})
 result_list = cl.append('bar', base_list)
+result_list = cl.append('goo', base_list)
+result_list = cl.append('haa', base_list)
+
+#TODO: Verwenden Sie zur Verarbeitung des Ergebnisses eine Callback-Funktion.
 
 print("Result: {}".format(result_list.value))
 
