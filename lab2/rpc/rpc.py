@@ -27,7 +27,7 @@ class Client:
     def stop(self):
         self.chan.leave('client')
 
-    def append(self, data, db_list):
+    def append(self, data, db_list, callback):
         print("Append called with data: {}".format(data))
         assert isinstance(db_list, DBList)
         msglst = (constRPC.APPEND, data, db_list)  # message payload
@@ -36,11 +36,16 @@ class Client:
         ackrcv = self.chan.receive_from(self.server)  # wait for ACK
         print("Data recieved: {}".format(ackrcv))
         if ackrcv == "ACK":
-            print("ACK recognized, waiting Thread started: {}")
-            background = waitForResponse(self.server)
+            print("ACK recognized, waiting Thread started: {}",  flush=True)
+            background = waitForResponse(self.server, callback)
             background.start()
-            background.join()
 
+            while background.is_alive():
+                print("Waiting for thread to finish...",  flush=True)
+                time.sleep(0.1)
+
+            print("Thread finished, exiting loop.",  flush=True)
+            self.stop()
 
 class Server:
     def __init__(self):
@@ -74,12 +79,16 @@ class Server:
 
 
 class waitForResponse(threading.Thread):
-    def __init__(self, server):
+    def __init__(self, chan, server, callback):
         threading.Thread.__init__(self)
+        self.chan = chan
         self.server = server
+        self.callback = callback
 
     def run(self):
-        print("---------------- asynchronus Thread is waiting..")
+        print("---------------- asynchronus Thread is waiting..",  flush=True)
         msgrcv = self.chan.receive_from(self.server)
-        print("---------------- asynchronus Thread receveid Data: {}".format(msgrcv))
+        print("---------------- asynchronus Thread receveid Data: {}".format(msgrcv),  flush=True)
+        if self.callback:
+            self.callback(msgrcv)
         return msgrcv[1]
