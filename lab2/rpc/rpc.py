@@ -1,3 +1,5 @@
+import threading
+import time
 import constRPC
 
 from context import lab_channel
@@ -29,8 +31,20 @@ class Client:
         assert isinstance(db_list, DBList)
         msglst = (constRPC.APPEND, data, db_list)  # message payload
         self.chan.send_to(self.server, msglst)  # send msg to server
-        msgrcv = self.chan.receive_from(self.server)  # wait for response
-        return msgrcv[1]  # pass it to caller
+        # bis hierhin gleich, nachricht wird versendet
+        # auf Ack warten und zurückgeben
+        ackrcv = self.chan.receive_from(self.server)  # wait for response (ACK)
+        print(ackrcv)
+        if ackrcv[1] == 'ACK':
+            print("Ack erhalten")
+            background = WaitForResult()
+            background.start
+            background.join
+            return background
+            
+        else:
+            print("kein ACK erhalten")
+           
 
 
 class Server:
@@ -50,9 +64,24 @@ class Server:
             msgreq = self.chan.receive_from_any(self.timeout)  # wait for any request
             if msgreq is not None:
                 client = msgreq[0]  # see who is the caller
+                self.chan.send_to({client},"ACK")  # return ACK
+                time.sleep(10)
                 msgrpc = msgreq[1]  # fetch call & parameters
+                
                 if constRPC.APPEND == msgrpc[0]:  # check what is being requested
+                    
+                    
                     result = self.append(msgrpc[1], msgrpc[2])  # do local call
                     self.chan.send_to({client}, result)  # return response
                 else:
                     pass  # unsupported request, simply ignore
+
+class WaitForResult(threading.Thread):
+    def __init__(self):
+        threading.Thread.__init__(self)
+        self.server= Server
+
+    def run(self):
+        print("Client wartet auf Ergebnis")
+        result_msg = self.chan.receive_from(self.server)
+        return result_msg[1]
