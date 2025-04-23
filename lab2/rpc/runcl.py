@@ -1,3 +1,4 @@
+import time
 import rpc
 import logging
 
@@ -9,12 +10,15 @@ cl = rpc.Client()
 cl.run()
 
 base_list = rpc.DBList({'foo'})
-result_list = cl.append('bar', base_list)
-result_list = cl.append('goo', base_list)
-result_list = cl.append('haa', base_list)
 
-#TODO: Verwenden Sie zur Verarbeitung des Ergebnisses eine Callback-Funktion.
+def result_callback(result):
+    print("Ergebnis empfangen: {}".format(result.value))
 
-print("Result: {}".format(result_list.value))
+cl.append('bar', base_list, result_callback)
 
+print("Client schreibt etwas")
+#result_callback(result_list)
+#print("Result: {}".format(result_list))
+
+time.sleep(12)
 cl.stop()
