@@ -1,6 +1,8 @@
 import threading
 import time
 import constRPC
+import threading
+import time
 
 from context import lab_channel
 
@@ -48,6 +50,7 @@ class Client:
            
 
 
+
 class Server:
     def __init__(self):
         self.chan = lab_channel.Channel()
@@ -65,8 +68,10 @@ class Server:
             msgreq = self.chan.receive_from_any(self.timeout)  # wait for any request
             if msgreq is not None:
                 client = msgreq[0]  # see who is the caller
+
                 self.chan.send_to({client},"ACK")  # return ACK
                 time.sleep(10)
+                
                 msgrpc = msgreq[1]  # fetch call & parameters
                 
                 if constRPC.APPEND == msgrpc[0]:  # check what is being requested
@@ -75,6 +80,7 @@ class Server:
                     print(result)
                 else:
                     pass  # unsupported request, simply ignore
+
 
 class WaitForResult(threading.Thread):
     def __init__(self,chan, server, callback):
@@ -87,3 +93,4 @@ class WaitForResult(threading.Thread):
         print("Client wartet auf Ergebnis")
         result_msg = self.chan.receive_from(self.server)
         self.callback(result_msg[1])
+

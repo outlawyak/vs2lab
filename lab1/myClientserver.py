@@ -32,7 +32,7 @@ class Server:
             "musterfrau": 12345,
             "lustig": 55467,
             "traurig": 11987,
-            "mueller": 22387,
+            "müller": 22387,
             "fischer": 23454
         }
 
@@ -44,14 +44,14 @@ class Server:
                 (connection, address) = self.sock.accept()  # returns new socket and address of client
                 while True:  # forever
                     data = connection.recv(1024)  # receive data from client
-                    data = data.decode('ascii')
+                    data = data.decode('utf-8')
             
                     if not data:
                         break  # stop if client stopped
 
                     if data == "1":
                         self._logger.info("GET ALL called")
-                        byte_data = str(phoneNmbers).encode("ascii") #send all numbers dictionary
+                        byte_data = str(phoneNmbers).encode("utf-8") #send all numbers dictionary
 
                     else:
                         self._logger.info("GET called")
@@ -80,7 +80,7 @@ class Client:
     def call_search(self, msg_in):
         """ Search for name- call server """
         self.logger.info("GET called")
-        self.sock.send(msg_in.encode('ascii'))  # send encoded string
+        self.sock.send(msg_in.encode('utf-8'))  # send encoded string
 
         data = self.sock.recv(1024)  # receive the response
         msg_out = int.from_bytes(data, byteorder='big')
@@ -91,10 +91,10 @@ class Client:
     def call_all(self, msg_in="1"):
         """ get all numbers- call server """
         self.logger.info("GET ALL called")
-        self.sock.send(msg_in.encode('ascii'))  # send a 1 as sign for all 
+        self.sock.send(msg_in.encode('utf-8'))  # send a 1 as sign for all 
 
         data = self.sock.recv(1024)  # receive the response
-        msg_out = data.decode('ascii')
+        msg_out = data.decode('utf-8')
         print(msg_out)  # print the result
         return msg_out
 
