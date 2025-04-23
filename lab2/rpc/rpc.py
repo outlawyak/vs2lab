@@ -27,20 +27,21 @@ class Client:
     def stop(self):
         self.chan.leave('client')
 
-    def append(self, data, db_list):
+    def append(self, data, db_list, callback):
         assert isinstance(db_list, DBList)
         msglst = (constRPC.APPEND, data, db_list)  # message payload
         self.chan.send_to(self.server, msglst)  # send msg to server
         # bis hierhin gleich, nachricht wird versendet
         # auf Ack warten und zurückgeben
         ackrcv = self.chan.receive_from(self.server)  # wait for response (ACK)
-        print(ackrcv)
+        #print(ackrcv)
         if ackrcv[1] == 'ACK':
             print("Ack erhalten")
-            background = WaitForResult()
-            background.start
-            background.join
-            return background
+            background = WaitForResult(self.chan, self.server, callback)
+            background.start()
+            print("Warte auf Antwort")
+            
+            #background.join
             
         else:
             print("kein ACK erhalten")
@@ -69,19 +70,20 @@ class Server:
                 msgrpc = msgreq[1]  # fetch call & parameters
                 
                 if constRPC.APPEND == msgrpc[0]:  # check what is being requested
-                    
-                    
                     result = self.append(msgrpc[1], msgrpc[2])  # do local call
                     self.chan.send_to({client}, result)  # return response
+                    print(result)
                 else:
                     pass  # unsupported request, simply ignore
 
 class WaitForResult(threading.Thread):
-    def __init__(self):
+    def __init__(self,chan, server, callback):
         threading.Thread.__init__(self)
-        self.server= Server
+        self.server= server
+        self.callback = callback 
+        self.chan = chan            # Kanal, um Ergebnis zu empfangen
 
     def run(self):
         print("Client wartet auf Ergebnis")
         result_msg = self.chan.receive_from(self.server)
-        return result_msg[1]
+        self.callback(result_msg[1])
