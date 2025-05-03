@@ -152,7 +152,19 @@ class ChordNode:
 
                 # look up and return local successor 
                 next_id: int = self.local_successor_node(request[1])
-                self.channel.send_to([sender], (constChord.LOOKUP_REP, next_id))
+                if next_id == self.node_id:
+                    # The node is responsible for the key
+                    print("\n###### NODE " + str(self.node_id) + " IS RESPONSIBLE FOR KEY " + str(request[1]) + " EXIT RECURSION")
+                    print("\n###### RES SENT BACK FROM NODE " + str(self.node_id) + " TO " + sender + " AND KEY " + str(request[1]))
+                    self.channel.send_to([sender], (constChord.LOOKUP_REP, next_id))
+                else:
+                    # The node is not responsible for the key, forward the request to the next node 
+                    print("\n###### FORWARDING REQ FROM NODE " + str(self.node_id) + " TO NODE " + str(next_id) + "\n")
+                    self.channel.send_to([str(next_id)], (constChord.LOOKUP_REQ, request[1]))
+                    response = self.channel.receive_from([str(next_id)])
+
+                    print("\n###### RES SENT BACK FROM NODE " + str(self.node_id) + " TO " + sender + " AND KEY " + str(request[1]) + "\n")
+                    self.channel.send_to([sender], response[1])
 
                 # Finally do a sanity check
                 if not self.channel.exists(next_id):  # probe for existence
