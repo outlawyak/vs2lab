@@ -18,15 +18,15 @@ class Process:
     with others for accessing the critical section. A PASSIVE process will never 
     request to enter the critical section itself but will allow others to do so.
 
-    A process broadcasts an ENTER request if it wants to enter the CS. A process
-    that doesn't want to ENTER replies with an ALLOW broadcast. A process that
-    wants to ENTER and receives another ENTER request replies with an ALLOW
-    broadcast (which is then later in time than its own ENTER request).
+    A process broadcasts an ENTER request if it wants to enter the CS. 
+    - A process that doesn't want to ENTER replies with an ALLOW broadcast. 
+    - A process that wants to ENTER and receives another ENTER request replies with an ALLOW broadcast (which is then later in time than its own ENTER request).
 
-    A process enters the CS if a) its ENTER message is first in the queue (it is
-    the oldest pending message) AND b) all other processes have sent messages
-    that are younger (either ENTER or ALLOW). RELEASE requests purge
-    corresponding ENTER requests from the top of the local queues.
+    A process enters the CS if 
+    a) its ENTER message is first in the queue (it is the oldest pending message) AND 
+    b) all other processes have sent messages that are younger (either ENTER or ALLOW). 
+    
+    RELEASE requests purge (delete) corresponding ENTER requests from the top of the local queues. (Take back request)
 
     Message Format:
 
@@ -46,6 +46,9 @@ class Process:
         self.peer_name = 'unassigned'  # The original peer name
         self.peer_type = 'unassigned'  # A flag indicating behavior pattern
         self.logger = logging.getLogger("vs2lab.lab5.mutex.process.Process")
+        self.timeout_counts = {} #counts the timeouts 
+        self.processes_with_later_message = [] # trace who has answered
+
 
     def __mapid(self, id='-1'):
         # format channel member address
@@ -53,6 +56,7 @@ class Process:
             id = self.process_id
         return 'Proc-'+str(id)
 
+    # sort the queue for timestamps after adding a new request  ---------------------------------------------------
     def __cleanup_queue(self):
         if len(self.queue) > 0:
             # self.queue.sort(key = lambda tup: tup[0])
@@ -63,6 +67,11 @@ class Process:
                 if len(self.queue) == 0:
                     break
 
+    def __remove_peer_messages(self, crashed_peer_id):
+        self.queue = [msg for msg in self.queue if msg[1] != crashed_peer_id]
+        self.logger.debug(f"{self.__mapid()} removed messages from crashed peer {self.__mapid(crashed_peer_id)}.")
+
+    # send request to enter ----------------------------------------------------------------------------------------
     def __request_to_enter(self):
         self.clock = self.clock + 1  # Increment clock value
         request_msg = (self.clock, self.process_id, ENTER)
@@ -70,11 +79,13 @@ class Process:
         self.__cleanup_queue()  # Sort the queue
         self.channel.send_to(self.other_processes, request_msg)  # Send request
 
+    # allow ENTER for another request ---------------------------------------------------------------------------------------------------------------
     def __allow_to_enter(self, requester):
         self.clock = self.clock + 1  # Increment clock value
         msg = (self.clock, self.process_id, ALLOW)
         self.channel.send_to([requester], msg)  # Permit other
 
+    # when leaving the CS, remove entry from queue ---------------------------------------------------------------------------------------------------------------
     def __release(self):
         # need to be first in queue to issue a release
         assert self.queue[0][1] == self.process_id, 'State error: inconsistent local RELEASE'
@@ -87,15 +98,18 @@ class Process:
         # Multicast release notification
         self.channel.send_to(self.other_processes, msg)
 
+    # received allow enter ---------------------------------------------------------------------------------------------------------------
     def __allowed_to_enter(self):
         # See who has sent a message (the set will hold at most one element per sender)
-        processes_with_later_message = set([req[1] for req in self.queue[1:]])
+        self.processes_with_later_message = set([req[1] for req in self.queue[1:]])
         # Access granted if this process is first in queue and all others have answered (logically) later
         first_in_queue = self.queue[0][1] == self.process_id
         all_have_answered = len(self.other_processes) == len(
-            processes_with_later_message)
+            self.processes_with_later_message)
+        
         return first_in_queue and all_have_answered
 
+    # receive messages ---------------------------------------------------------------------------------------------------------------
     def __receive(self):
         # Pick up any message
         _receive = self.channel.receive_from(self.other_processes, 3)
@@ -111,12 +125,17 @@ class Process:
                 else "ALLOW" if msg[2] == ALLOW
                 else "RELEASE", self.__mapid(msg[1])))
 
+            # recieved enter request ---------------------------------------------------------------------------------------------------------------
             if msg[2] == ENTER:
                 self.queue.append(msg)  # Append an ENTER request
                 # and unconditionally allow (don't want to access CS oneself)
                 self.__allow_to_enter(msg[1])
+            
+            # received allow enter critival section ---------------------------------------------------------------------------------------------------------------
             elif msg[2] == ALLOW:
                 self.queue.append(msg)  # Append an ALLOW
+
+            # received release request ---------------------------------------------------------------------------------------------------------------
             elif msg[2] == RELEASE:
                 # assure release requester indeed has access (his ENTER is first in queue)
                 assert self.queue[0][1] == msg[1] and self.queue[0][2] == ENTER, 'State error: inconsistent remote RELEASE'
@@ -124,12 +143,31 @@ class Process:
 
             self.__cleanup_queue()  # Finally sort and cleanup the queue
         else:
+            
             self.logger.info("{} timed out on RECEIVE. Local queue: {}".
                              format(self.__mapid(),
                                     list(map(lambda msg: (
                                         'Clock '+str(msg[0]),
                                         self.__mapid(msg[1]),
                                         msg[2]), self.queue))))
+
+            #TODO: Check that correct peer gets declared as crashed
+            
+            # timeout count of peer who didnt answer increased
+            for peer in self.other_processes:
+                if peer not in self.processes_with_later_message:
+                    self.timeout_counts[peer] = self.timeout_counts.get(peer, 0) + 1
+                    missing_peer = peer
+
+                    # if more than 3 timeouts -> crash
+                    if self.timeout_counts[missing_peer] >= 3:
+                    
+                        self.logger.warning(f"Process {self.__mapid(missing_peer)} presumed crashed. Removing from coordination.")
+                        self.other_processes.remove(missing_peer)
+                        self.all_processes.remove(missing_peer)
+                        self.__remove_peer_messages(missing_peer)
+        
+                        self.processes_with_later_message = []
 
     def init(self, peer_name, peer_type):
         self.channel.bind(self.process_id)
@@ -146,7 +184,9 @@ class Process:
 
         self.logger.info("{} joined channel as {}.".format(
             peer_name, self.__mapid()))
+    
 
+    # run Process ---------------------------------------------------------------------------------------------------------------
     def run(self):
         while True:
             # Enter the critical section if
@@ -156,13 +196,26 @@ class Process:
             if len(self.all_processes) > 1 and \
                     self.peer_type == ACTIVE and \
                     random.choice([True, False]):
-                self.logger.debug("{} wants to ENTER CS at CLOCK {}."
+                self.logger.debug("{} wants to ENTER Critical Section (CS) at CLOCK {}."
                                   .format(self.__mapid(), self.clock))
 
                 self.__request_to_enter()
+
+                print("Local queue after request: {}".
+                            format(list(map(lambda msg: (
+                                    'Clock '+str(msg[0]),
+                                    self.__mapid(msg[1]),
+                                    msg[2]), self.queue))))
                 while not self.__allowed_to_enter():
                     self.__receive()
 
+
+                print("Local queue after allow: {}".
+                            format(list(map(lambda msg: (
+                                        'Clock '+str(msg[0]),
+                                        self.__mapid(msg[1]),
+                                        msg[2]), self.queue))))
+                # recieved allow CS and first in queue ---------------------------------------------------------------------------------------------------------------
                 # Stay in CS for some time ...
                 sleep_time = random.randint(0, 2000)
                 self.logger.debug("{} enters CS for {} milliseconds."
@@ -173,8 +226,13 @@ class Process:
                 # ... then leave CS
                 print(" CS -> {}".format(self.__mapid()))
                 self.__release()
+                print("Local queue: {}".
+                             format(list(map(lambda msg: (
+                                        'Clock '+str(msg[0]),
+                                        self.__mapid(msg[1]),
+                                        msg[2]), self.queue))))
                 continue
 
-            # Occasionally serve requests to enter (
+            # Occasionally serve requests to enter (        ??
             if random.choice([True, False]):
                 self.__receive()
