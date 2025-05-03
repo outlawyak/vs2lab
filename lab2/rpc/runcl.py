@@ -16,9 +16,10 @@ def result_callback(result):
 
 cl.append('bar', base_list, result_callback)
 
-print("Client schreibt etwas")
-#result_callback(result_list)
-#print("Result: {}".format(result_list))
+for x in range (11):
+    print("Client schreibt etwas", x)
+    time.sleep(1)
 
-time.sleep(12)
+
+#time.sleep(12)
 cl.stop()
