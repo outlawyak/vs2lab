@@ -76,7 +76,7 @@ if __name__ == "__main__":  # if script is started from command line
         peer_proc.start()
 
     # terminate a random process after some time (10 seconds)
-    time.sleep(10)
+    time.sleep(5)
     proc_id = random.randint(0, len(children) - 1)
     proc_to_crash = children[proc_id][0]
     type_to_crash = children[proc_id][1]
@@ -85,7 +85,7 @@ if __name__ == "__main__":  # if script is started from command line
     proc_to_crash.terminate()
     proc_to_crash.join()
 
-    logger.warning("Process {} of type {} has crashed.".format(
+    logger.warning("---------------------------------Process {} of type {} has crashed-----------------------------".format(
         proc_to_crash.name, type_to_crash))
 
     # wait for peer procs to finish

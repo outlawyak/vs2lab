@@ -2,8 +2,8 @@ import logging
 import random
 import time
 
-from constMutex import ENTER, RELEASE, ALLOW, ACTIVE
-
+from constMutex import *
+from functools import cmp_to_key
 
 class Process:
     """
@@ -35,6 +35,7 @@ class Process:
     <Request Type>: ENTER | ALLOW  | RELEASE
 
     """
+   
 
     def __init__(self, chan):
         self.channel = chan  # Create ref to actual channel
@@ -47,7 +48,6 @@ class Process:
         self.peer_type = 'unassigned'  # A flag indicating behavior pattern
         self.logger = logging.getLogger("vs2lab.lab5.mutex.process.Process")
         self.timeout_counts = {} #counts the timeouts 
-        self.processes_with_later_message = [] # trace who has answered
 
 
     def __mapid(self, id='-1'):
@@ -69,7 +69,7 @@ class Process:
 
     def __remove_peer_messages(self, crashed_peer_id):
         self.queue = [msg for msg in self.queue if msg[1] != crashed_peer_id]
-        self.logger.debug(f"{self.__mapid()} removed messages from crashed peer {self.__mapid(crashed_peer_id)}.")
+        print(f"{self.__mapid()} removed messages from crashed peer {self.__mapid(crashed_peer_id)}.")
 
     # send request to enter ----------------------------------------------------------------------------------------
     def __request_to_enter(self):
@@ -98,14 +98,42 @@ class Process:
         # Multicast release notification
         self.channel.send_to(self.other_processes, msg)
 
+    # removes request from a timeouted process at head and adds later -------------------------------------------------------------------------
+    def __timeout_reintegrate_process(self, peer_to_release):
+        # need to be first in queue to issue a release
+        assert self.queue[0][1] == peer_to_release, 'State error: inconsistent local RELEASE'
+
+        # construct new queue from later ENTER requests (removing all ALLOWS)
+        tmp = [r for r in self.queue[1:] if r[2] == ENTER]
+        self.queue = tmp  # and copy to new queue
+        self.clock = self.clock + 1  # Increment clock value
+        msg = (self.clock, peer_to_release, RELEASE)
+        # Multicast release notification
+        self.channel.send_to(self.other_processes, msg)
+
+        self.clock = self.clock + 1  # Increment clock value
+        request_msg = (self.clock, peer_to_release, ENTER)
+        self.queue.append(request_msg)  # Append request to queue
+        self.__cleanup_queue()  # Sort the queue
+        self.channel.send_to(self.other_processes, request_msg)  # Send request
+
+        print("Reintegrate {} later; Queue: {}".format(peer_to_release, self.queue))
+
     # received allow enter ---------------------------------------------------------------------------------------------------------------
     def __allowed_to_enter(self):
+        
+        if(len(self.queue) == 0):
+            return True
+
+        if self.queue[0][2] == TIMEOUT:
+            del(self.queue[0])
+
         # See who has sent a message (the set will hold at most one element per sender)
-        self.processes_with_later_message = set([req[1] for req in self.queue[1:]])
+        processes_with_later_message = set([req[1] for req in self.queue[1:]])
         # Access granted if this process is first in queue and all others have answered (logically) later
         first_in_queue = self.queue[0][1] == self.process_id
         all_have_answered = len(self.other_processes) == len(
-            self.processes_with_later_message)
+            processes_with_later_message)
         
         return first_in_queue and all_have_answered
 
@@ -123,7 +151,10 @@ class Process:
                 self.__mapid(),
                 "ENTER" if msg[2] == ENTER
                 else "ALLOW" if msg[2] == ALLOW
-                else "RELEASE", self.__mapid(msg[1])))
+                else "RELEASE" if msg[2] == RELEASE
+                else "TIMEOUT_STEP" if msg[2] == TIMEOUT_STEP
+                else "TIMEOUT"
+                , self.__mapid(msg[1])))
 
             # recieved enter request ---------------------------------------------------------------------------------------------------------------
             if msg[2] == ENTER:
@@ -141,6 +172,31 @@ class Process:
                 assert self.queue[0][1] == msg[1] and self.queue[0][2] == ENTER, 'State error: inconsistent remote RELEASE'
                 del (self.queue[0])  # Just remove first message
 
+            #Timeout Notice received
+            elif msg[2] == TIMEOUT_STEP:
+                print("Peer {} received TimeoutStep".format(self.process_id))
+                #update own timeout counter
+                self.timeout_counts[msg[1]] = self.timeout_counts.get(msg[1], 0) + 1
+                print("Timeout counts at peer {}: {}".format(self.process_id, self.timeout_counts))
+                
+                if self.timeout_counts[msg[1]] >= 3:
+                     self.__delprocessFromGroup(msg[1])
+                     self.__sendTimeoutNotice(msg[1])
+                else:
+                    #remove timeout-step and reintegrate request from timeouted process later
+                    self.queue = [m for m in self.queue if not (m[1] == msg[1] and m[2] == TIMEOUT_STEP)]
+
+                    #if timeouted process request at head of queue
+                    if self.queue[0][1] == msg[2]:
+                        self.__timeout_reintegrate_process(msg[2])
+
+
+            elif msg[2] == TIMEOUT:
+            
+                self.queue = [m for m in self.queue if m[1] != msg[1]]
+                #delete Timeouted Process from group
+                self.__delprocessFromGroup(msg[1])
+
             self.__cleanup_queue()  # Finally sort and cleanup the queue
         else:
             
@@ -151,23 +207,56 @@ class Process:
                                         self.__mapid(msg[1]),
                                         msg[2]), self.queue))))
 
-            #TODO: Check that correct peer gets declared as crashed
-            
-            # timeout count of peer who didnt answer increased
-            for peer in self.other_processes:
-                if peer not in self.processes_with_later_message:
-                    self.timeout_counts[peer] = self.timeout_counts.get(peer, 0) + 1
-                    missing_peer = peer
+            processes_with_later_message = set([req[1] for req in self.queue[1:]])
 
-                    # if more than 3 timeouts -> crash
-                    if self.timeout_counts[missing_peer] >= 3:
+            for peer in self.other_processes:
+                if peer not in processes_with_later_message:
+
+                    timeouted_peer = peer
+                    print("\nTimeouted Peer {} at peer {}".format(timeouted_peer, self.process_id))
                     
-                        self.logger.warning(f"Process {self.__mapid(missing_peer)} presumed crashed. Removing from coordination.")
-                        self.other_processes.remove(missing_peer)
-                        self.all_processes.remove(missing_peer)
-                        self.__remove_peer_messages(missing_peer)
-        
-                        self.processes_with_later_message = []
+                    #UPDATE OWN TIMEOUT COUNTER
+                    self.timeout_counts[timeouted_peer] = self.timeout_counts.get(timeouted_peer, 0) + 1
+                    print("Timeout counts at peer {}: {}".format(self.process_id, self.timeout_counts))
+
+                    # # if more than 3 timeouts -> crash (check if already removed)
+                    if self.timeout_counts[timeouted_peer] == 3:
+                        self.__sendTimeoutNotice(timeouted_peer)
+                        self.__delprocessFromGroup(timeouted_peer)
+                    elif self.timeout_counts[timeouted_peer] < 3:
+                         self.__sendTimeoutStepNotice(timeouted_peer)
+                    else:
+                        continue
+
+                    
+    def __sendTimeoutStepNotice(self, timeouted_peer):
+        request_msg = (1, timeouted_peer, TIMEOUT_STEP)
+        self.queue.append(request_msg)  # Append request to queue
+        self.__cleanup_queue()  # Sort the queue
+        self.channel.send_to(self.other_processes, request_msg)  # Send request
+
+    def __sendTimeoutNotice(self, peer_to_delete):
+        #send notice for process has to be removed
+        request_msg = (0, peer_to_delete, TIMEOUT)
+        self.queue.append(request_msg)  # Append request to queue
+        self.__cleanup_queue()  # Sort the queue
+        self.channel.send_to(self.other_processes, request_msg)  # Send request
+    
+    def __delprocessFromGroup(self, peer_to_delete):
+        #check if already removed
+        if peer_to_delete in self.other_processes and peer_to_delete in self.all_processes:
+            self.logger.warning(f"Process {self.__mapid(peer_to_delete)} presumed crashed at {self.process_id}. Removing from coordination.")
+            self.other_processes.remove(peer_to_delete)
+            self.all_processes.remove(peer_to_delete)
+
+        #remove old Timeout Step messages
+        if len(self.queue) > 0:
+                    while self.queue[0][2] == TIMEOUT_STEP or self.queue[0][2] == TIMEOUT:
+                        del (self.queue[0])
+                        if len(self.queue) == 0:
+                            break
+        #reset timeout counts
+        self.timeout_counts = {}
 
     def init(self, peer_name, peer_type):
         self.channel.bind(self.process_id)
@@ -201,20 +290,9 @@ class Process:
 
                 self.__request_to_enter()
 
-                print("Local queue after request: {}".
-                            format(list(map(lambda msg: (
-                                    'Clock '+str(msg[0]),
-                                    self.__mapid(msg[1]),
-                                    msg[2]), self.queue))))
                 while not self.__allowed_to_enter():
                     self.__receive()
 
-
-                print("Local queue after allow: {}".
-                            format(list(map(lambda msg: (
-                                        'Clock '+str(msg[0]),
-                                        self.__mapid(msg[1]),
-                                        msg[2]), self.queue))))
                 # recieved allow CS and first in queue ---------------------------------------------------------------------------------------------------------------
                 # Stay in CS for some time ...
                 sleep_time = random.randint(0, 2000)
@@ -233,6 +311,6 @@ class Process:
                                         msg[2]), self.queue))))
                 continue
 
-            # Occasionally serve requests to enter (        ??
+            # Occasionally serve requests to enter
             if random.choice([True, False]):
                 self.__receive()
