@@ -30,4 +30,3 @@ for i in range(20):  # generate 100 workloads
     sentence = generate_sentence()
     print(sentence)
     push_socket.send(pickle.dumps(sentence))  # send workload to worker
-    push_socket.send(pickle.dumps("-------------------------------------------------------"))

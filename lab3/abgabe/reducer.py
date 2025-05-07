@@ -7,27 +7,15 @@ import zmq
 
 import constPipe
 
-def getSrc():
-    if(me == '1'):
-        return constPipe.SRC2
-    else:
-        return constPipe.SRC3
-    
-def getPort():
-    if(me == '1'):
-        return constPipe.PORT2
-    else:
-        return constPipe.PORT3
-    
+context = zmq.Context()    
 me = str(sys.argv[1])
 
-src=getSrc()
-prt=getPort()
-address = "tcp://" + src + ":" + prt #mapper task source
+if(me =='1'):
+    address = "tcp://127.0.0.1:50012"  #mapper task source
+else:
+    address = "tcp://127.0.0.1:50013"
 
-context = zmq.Context()
 pull_socket = context.socket(zmq.PULL)  # create a pull socket
-
 pull_socket.bind(address)  # connect to splitter
 
 time.sleep(1) 
