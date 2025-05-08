@@ -10,10 +10,14 @@ Chord Application
 import logging
 import sys
 import multiprocessing as mp
+import time
 
 import chordnode as chord_node
 import constChord
 from context import lab_channel, lab_logging
+
+import random
+from random import randint
 
 lab_logging.setup(stream_level=logging.INFO)
 
@@ -29,10 +33,26 @@ class DummyChordClient:
         self.channel.bind(self.node_id)
 
     def run(self):
-        print("Implement me pls...")
+          	
+        # Randomly select a node from the channel and a random key to lookup
+        rand_node = random.choice([node.decode() for node in list(self.channel.channel.smembers('node'))])
+        rand_key = randint(0, self.channel.MAXPROC)
+        time.sleep(1)  # wait for a while to let the nodes join the channel
+        
+        ## Print the selected node and key
+        print("\n###### INITIAL REQUEST: NODE " + self.node_id + " SENTS REQ TO NODE " + str(rand_node) +  " FOR KEY " + str(rand_key) + "\n")
+        self.sendRequest(rand_node, rand_key)
+
+        # Wait for a response and print the responsible node
+        responsible_node = self.channel.receive_from([rand_node])[1][1]
+        print("\n###### NODE " + str(responsible_node) + " IS RESPONSIBLE FOR KEY " + str(rand_key))
+
         self.channel.send_to(  # a final multicast
-            {i.decode() for i in list(self.channel.channel.smembers('node'))},
+            {node.decode() for node in list(self.channel.channel.smembers('node'))},
             constChord.STOP)
+        
+    def sendRequest(self, node_id, key):
+        self.channel.send_to([node_id], (constChord.LOOKUP_REQ, key, self.node_id))
 
 
 def create_and_run(num_bits, node_class, enter_bar, run_bar):
