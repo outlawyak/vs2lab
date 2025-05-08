@@ -99,7 +99,7 @@ class Process:
         self.channel.send_to(self.other_processes, msg)
 
     # removes request from a timeouted process at head and adds later -------------------------------------------------------------------------
-    def __timeout_reintegrate_process(self, peer_to_release):
+    def __timeout_reintegrate_peer_request(self, peer_to_release):
         # need to be first in queue to issue a release
         assert self.queue[0][1] == peer_to_release, 'State error: inconsistent local RELEASE'
 
@@ -111,6 +111,7 @@ class Process:
         # Multicast release notification
         self.channel.send_to(self.other_processes, msg)
 
+        # add message at end of queue
         self.clock = self.clock + 1  # Increment clock value
         request_msg = (self.clock, peer_to_release, ENTER)
         self.queue.append(request_msg)  # Append request to queue
@@ -155,6 +156,8 @@ class Process:
                 else "TIMEOUT_STEP" if msg[2] == TIMEOUT_STEP
                 else "TIMEOUT"
                 , self.__mapid(msg[1])))
+            
+            print("Process {} has queue: {} and new message {}".format(self.process_id, self.queue, msg))
 
             # recieved enter request ---------------------------------------------------------------------------------------------------------------
             if msg[2] == ENTER:
@@ -177,7 +180,7 @@ class Process:
                 print("Peer {} received TimeoutStep".format(self.process_id))
                 #update own timeout counter
                 self.timeout_counts[msg[1]] = self.timeout_counts.get(msg[1], 0) + 1
-                print("Timeout counts at peer {}: {}".format(self.process_id, self.timeout_counts))
+                print("Timeout counts at peer {}: {} \n".format(self.process_id, self.timeout_counts))
                 
                 if self.timeout_counts[msg[1]] >= 3:
                      self.__delprocessFromGroup(msg[1])
@@ -187,12 +190,12 @@ class Process:
                     self.queue = [m for m in self.queue if not (m[1] == msg[1] and m[2] == TIMEOUT_STEP)]
 
                     #if timeouted process request at head of queue
-                    if self.queue[0][1] == msg[2]:
-                        self.__timeout_reintegrate_process(msg[2])
+                    if len(self.queue) > 0 and self.queue[0][1] == msg[1]:
+                        self.__timeout_reintegrate_peer_request(msg[1])
 
 
             elif msg[2] == TIMEOUT:
-            
+                print("Peer {} received Timeout".format(self.process_id))
                 self.queue = [m for m in self.queue if m[1] != msg[1]]
                 #delete Timeouted Process from group
                 self.__delprocessFromGroup(msg[1])
@@ -255,6 +258,7 @@ class Process:
                         del (self.queue[0])
                         if len(self.queue) == 0:
                             break
+        self.__remove_peer_messages(peer_to_delete)
         #reset timeout counts
         self.timeout_counts = {}
 
