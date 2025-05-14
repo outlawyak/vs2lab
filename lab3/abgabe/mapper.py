@@ -5,8 +5,6 @@ import time
 
 import zmq
 
-import constPipe
-
 me = str(sys.argv[1])
 context = zmq.Context()
 
@@ -35,6 +33,8 @@ while True:
     words = re.findall(r'\b\w+\b', sentence)
     for w in words:
         if "e" in w:
+            push_socket1.send(pickle.dumps(w))
+        elif "E" in w:
             push_socket1.send(pickle.dumps(w))
         else:
             push_socket2.send(pickle.dumps(w))

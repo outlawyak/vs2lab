@@ -5,11 +5,12 @@
  2. Experiment: 
    Beide Clients senden 1.Nachrichten und warten auf Antwort. Server antwortet zuerst ausschließlich dem Client, der als erstes gesendet hat und danach erst dem anderen Client.
 
- **Aufgabe Lab3.2:**
+ **Aufgabe Lab3.2:  Publish-Subscribe**
  1. Experiment:
-   Beide Clients subscriben sich jeweils auf die Antworten die DATE oder TIME enthalten und printen diese aus. Der Server wird jedoch nicht gestoppt. Er sendet alle 5sec erneut Zeit und Datum.
+   Beide Clients empfangen die Zeitangaben die der Server sendet.
 
- 2. Experiment unterscheidet sich nicht vom 1.?
+ 2. Experiment
+  Beide Clients subscriben sich jeweils auf die Antworten die DATE oder TIME enthalten und printen diese aus. Der Server wird jedoch nicht gestoppt. Er sendet alle 5sec erneut Zeit und Datum.
 
  **Aufgabe Lab3.3:**
  1. Experiment:

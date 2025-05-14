@@ -1,12 +1,8 @@
 import pickle
 import random
-import sys
 import time
-
 import random
 import zmq
-
-import constPipe
 
 subjects = ["Die Katze", "Ein Hund", "Der Lehrer"]
 verbs = ["läuft", "schläft", "programmierte"]
@@ -26,7 +22,7 @@ push_socket.bind(address)  # bind socket to address
 
 time.sleep(1) # wait to allow all clients to connect
 
-for i in range(20):  # generate 100 workloads
+for i in range(20): 
     sentence = generate_sentence()
     print(sentence)
     push_socket.send(pickle.dumps(sentence))  # send workload to worker

@@ -2,10 +2,8 @@ import pickle
 import re
 import sys
 import time
-
+from collections import defaultdict
 import zmq
-
-import constPipe
 
 context = zmq.Context()    
 me = str(sys.argv[1])
@@ -21,8 +19,9 @@ pull_socket.bind(address)  # connect to splitter
 time.sleep(1) 
 
 print("Reducer {} started".format(me))
-wordscount = 0
+words=defaultdict(int)
+
 while True:
     word = pickle.loads(pull_socket.recv())  # receive work mapper
-    wordscount +=1
-    print(word, ":", wordscount)
+    words[word]+=1
+    print(words)
