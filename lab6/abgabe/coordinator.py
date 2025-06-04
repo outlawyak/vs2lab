@@ -80,6 +80,7 @@ class Coordinator:
         yet_to_receive = list(self.participants)
         while len(yet_to_receive) > 0:
             msg = self.channel.receive_from(self.participants, TIMEOUT)
+            
             self._enter_state('COMMIT')
             # Inform all participants about global commit
             self.channel.send_to(self.participants, GLOBAL_COMMIT)

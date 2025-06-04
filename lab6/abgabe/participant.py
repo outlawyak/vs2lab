@@ -83,7 +83,12 @@ class Participant:
                 #Phase 2b
                 # Wait for coordinator to notify the final outcome
                 msg = self.channel.receive_from(self.coordinator, TIMEOUT)
-                if msg[1] == GLOBAL_ABORT :
+                if not msg:  # Crashed coordinator
+                    self._enter_state('WAIT')
+                    self.channel.send_to(self.all_participants, 'GLOBAL_ABORT')
+                    decision = GLOBAL_ABORT
+                    self._enter_state('WAIT')
+                elif msg[1] == GLOBAL_ABORT :
                     self._enter_state('ABORT')
                  
                 else: 
@@ -93,7 +98,14 @@ class Participant:
 
                 #Phase 3b
                     msg = self.channel.receive_from(self.coordinator, TIMEOUT)
-                    if msg[1] == GLOBAL_COMMIT:
+                    if not msg:  
+                        self._enter_state('COMMIT')
+                        self.channel.send_to(self.all_participants, GLOBAL_COMMIT)
+
+                    elif msg[1] == 'ABORT':
+                        self._enter_state('ABORT')
+                    else: 
+                        assert msg[1] == GLOBAL_COMMIT
                         self._enter_state('COMMIT')
                 # if not msg:  # Crashed coordinator
                 #     # Ask all processes for their decisions
