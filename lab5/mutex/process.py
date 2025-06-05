@@ -127,7 +127,6 @@ class Process:
                 assert self.queue[0][1] == msg[1] and self.queue[0][2] == ENTER, 'State error: inconsistent remote RELEASE'
                 del (self.queue[0])  # Just remove first message
             elif msg[2] == PING:
-                print("PING received ")
                 if self.process_id not in self.working_processes: #append own process to working processes
                     self.working_processes.append(self.process_id)
                 if msg[1] not in self.working_processes:    #append process from message to working processes
@@ -154,17 +153,16 @@ class Process:
             
             if self.counter > 1:
                 for item in self.other_processes:
-                    print(self.working_processes)
-
                     if item not in self.working_processes:
                         self.crashed_processes.append(item)
-                        print("Process {} presumed crashed at {}".format(item, self.process_id))
+                        print("Process {} presumed crashed at {} ----------------removing from coordination".format(item, self.process_id))
+                    
+                self.working_processes.clear()
 
                 for i in self.crashed_processes:
                     #remove from groups
                     if i in self.all_processes:
                         self.all_processes.remove(i)
-                        print(i)
 
                     if i in self.other_processes:
                         self.other_processes.remove(i)
