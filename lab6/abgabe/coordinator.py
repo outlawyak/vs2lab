@@ -73,7 +73,10 @@ class Coordinator:
 
         #Prepare commit
         self._enter_state('PRECOMMIT')
-        self.channel.send_to(self.participants, PREPARE_COMMIT)
+        self.channel.send_to(self.participants, "PREPARE_COMMIT")
+
+        if random.random() > 2/3:  # simulate a crash
+            return "Coordinator crashed in state PRECOMMIT."
 
         #Phase 3a
         #Collect if Participants are ready for commit

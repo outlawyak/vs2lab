@@ -141,14 +141,14 @@ class Participant:
                     self._enter_state('ABORT')
                  
                 else: 
-                    assert msg[1] == PREPARE_COMMIT
-                    self._enter_state(PRECOMMIT)
+                    assert msg[1] == "PREPARE_COMMIT"
+                    self._enter_state("PRECOMMIT")
                     self.channel.send_to(self.coordinator, READY_COMMIT)
 
                 #Phase 3b
                     msg = self.channel.receive_from(self.coordinator, TIMEOUT)
                     if not msg:  
-                        self._elect_new_coordinator
+                        self.elect_new_coordinator()
 
                     elif msg[1] == 'GLOBAL_ABORT':
                         self._enter_state('ABORT')
