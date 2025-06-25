@@ -52,7 +52,7 @@ class Participant:
         #Phase 1b
         self._enter_state('INIT')  # Start in local INIT state.
 
-    def _elect_new_coordinator(self):
+    def elect_new_coordinator(self):
         """Elect a new coordinator and inform all participants."""
         # Elect the participant with the lowest ID as the new coordinator
         new_coordinator = sorted(self.all_participants)[0]  # Example criterion: lowest ID
@@ -65,12 +65,12 @@ class Participant:
             for participant in self.all_participants:
                 if participant != self.participant:  # Skip self
                     self.channel.send_to({participant}, TIMEOUT)
-            self._handle_as_new_coordinator()
+            self.handle_as_new_coordinator()
         else:
             # Inform the new coordinator of the participant's state
             self.channel.send_to(self.coordinator, self.state)
 
-    def _handle_as_new_coordinator(self):
+    def handle_as_new_coordinator(self):
         """Handle responsibilities as the new coordinator."""
         states = {}
 
@@ -155,20 +155,20 @@ class Participant:
                     else: 
                         assert msg[1] == GLOBAL_COMMIT
                         self._enter_state('COMMIT')
-                # if not msg:  # Crashed coordinator
-                #     # Ask all processes for their decisions
-                #     self.channel.send_to(self.all_participants, NEED_DECISION)
-                #     while True:
-                #         msg = self.channel.receive_from_any()
-                #         # If someone reports a final decision,
-                #         # we locally adjust to it
-                #         if msg[1] in [
-                #                 GLOBAL_COMMIT, GLOBAL_ABORT, LOCAL_ABORT]:
-                #             decision = msg[1]
-                #             break
+                if not msg:  # Crashed coordinator
+                    # Ask all processes for their decisions
+                    self.channel.send_to(self.all_participants, NEED_DECISION)
+                    while True:
+                        msg = self.channel.receive_from_any()
+                        # If someone reports a final decision,
+                        # we locally adjust to it
+                        if msg[1] in [
+                                GLOBAL_COMMIT, GLOBAL_ABORT, LOCAL_ABORT]:
+                            decision = msg[1]
+                            break
 
-                # else:  # Coordinator came to a decision
-                #     decision = msg[1]
+                else:  # Coordinator came to a decision
+                    decision = msg[1]
 
         # Change local state based on the outcome of the joint commit protocol
         # Note: If the protocol has blocked due to coordinator crash,
