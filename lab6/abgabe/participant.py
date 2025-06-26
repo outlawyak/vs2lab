@@ -100,6 +100,7 @@ class Participant:
 
         elif self.state == 'PRECOMMIT' and all(state in ['READY', 'PRECOMMIT', 'COMMIT'] for state in states.values()):
             self._enter_state('COMMIT')
+            print("New coordinator send GLOBAL_COMMIT")
             self.channel.send_to(self.all_participants, GLOBAL_COMMIT)
 
         elif self.state in ['COMMIT', 'ABORT']:
@@ -163,6 +164,12 @@ class Participant:
                 msg = self.channel.receive_from(self.coordinator, TIMEOUT)
                 if not msg:  # Crashed coordinator
                    self.elect_new_coordinator()
+
+                   #Nachbehandlung
+                   msg = self.channel.receive_from(self.coordinator, 3*TIMEOUT)
+                   if msg[1] == GLOBAL_ABORT:
+                        self._enter_state('ABORT')
+                        decision = 'GLOBAL ABORT'
                 elif msg[1] == GLOBAL_ABORT :
                     self._enter_state('ABORT')
                  
@@ -175,16 +182,17 @@ class Participant:
                     msg = self.channel.receive_from(self.coordinator, TIMEOUT)
                     if not msg:  
                         self.elect_new_coordinator()
+
+                        #Nachbehandlung
+                        msg = self.channel.receive_from(self.coordinator, 3*TIMEOUT)
+                        if msg[1] == GLOBAL_COMMIT:
+                            self._enter_state('COMMIT')
+
                     elif msg[1] == 'GLOBAL_ABORT':
                         self._enter_state('ABORT')
                     else: 
                         assert msg[1] == GLOBAL_COMMIT
                         self._enter_state('COMMIT')
-                if not msg:  # Crashed coordinator
-                    self.elect_new_coordinator()
-
-                else:  # Coordinator came to a decision
-                    decision = msg[1]
 
         # Change local state based on the outcome of the joint commit protocol
         # Note: If the protocol has blocked due to coordinator crash,
