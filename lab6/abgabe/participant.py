@@ -181,16 +181,7 @@ class Participant:
                         assert msg[1] == GLOBAL_COMMIT
                         self._enter_state('COMMIT')
                 if not msg:  # Crashed coordinator
-                    # Ask all processes for their decisions
-                    self.channel.send_to(self.all_participants, NEED_DECISION)
-                    while True:
-                        msg = self.channel.receive_from_any()                           #TODO: Fall, dass niemand die Entscheidung treffen kann -> Timeout einbauen
-                        # If someone reports a final decision,
-                        # we locally adjust to it
-                        if msg[1] in [
-                                GLOBAL_COMMIT, GLOBAL_ABORT, LOCAL_ABORT]:
-                            decision = msg[1]
-                            break
+                    self.elect_new_coordinator()
 
                 else:  # Coordinator came to a decision
                     decision = msg[1]
