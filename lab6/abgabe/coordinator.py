@@ -80,6 +80,7 @@ class Coordinator:
 
         #Phase 3a
         #Collect if Participants are ready for commit
+        # if a participant timeouts here, the coordinator will send global commit nonetheless to the others
         yet_to_receive = list(self.participants)
         while len(yet_to_receive) > 0:
             msg = self.channel.receive_from(self.participants, TIMEOUT)

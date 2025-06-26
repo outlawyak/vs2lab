@@ -64,11 +64,14 @@ class Participant:
             self.logger.info("Participant {} acting as new coordinator.".format(self.participant))
             for participant in self.all_participants:
                 if participant != self.participant:  # Skip self
-                    self.channel.send_to({participant}, TIMEOUT)
+                    self.channel.send_to({participant}, self.state)             #send current state to all participants
             self.handle_as_new_coordinator()
         else:
-            # Inform the new coordinator of the participant's state
-            self.channel.send_to(self.coordinator, self.state)
+            #receive state from new coordinator
+            self.logger.info("Participant {} waiting for state from new coordinator {}.".format(self.participant, new_coordinator))
+            msg = self.channel.receive_from_any()
+            if msg and msg[1] in ['INIT', 'READY', 'PRECOMMIT', 'COMMIT', 'ABORT']:
+                self.handle_state_from_new_coordinator(msg[1])
 
     def handle_as_new_coordinator(self):
         """Handle responsibilities as the new coordinator."""
@@ -81,7 +84,7 @@ class Participant:
         # Collect states from all participants
         for participant in self.all_participants:
             if participant != self.participant:  # Skip self
-                msg = self.channel.receive_from({participant}, TIMEOUT)
+                msg = self.channel.receive_from({participant}, TIMEOUT)                                     
                 print(f"Msg: {msg}")
                 if msg:
                     states[participant] = msg[1]
@@ -90,18 +93,41 @@ class Participant:
         print(f"my state: {self.state}")
 
         # Synchronize states and determine global decision
+        #TODO: Ready müsste Wait sein?
         if self.state == 'READY' and all(state in ['INIT', 'READY', 'ABORT', 'PRECOMMIT'] for state in states.values()):
             self._enter_state('ABORT')
             self.channel.send_to(self.all_participants, GLOBAL_ABORT)
+
         elif self.state == 'PRECOMMIT' and all(state in ['READY', 'PRECOMMIT', 'COMMIT'] for state in states.values()):
             self._enter_state('COMMIT')
             self.channel.send_to(self.all_participants, GLOBAL_COMMIT)
+
         elif self.state in ['COMMIT', 'ABORT']:
             # Fall 3: Already in a final state, propagate it
             self.channel.send_to(self.all_participants, GLOBAL_COMMIT if self.state == 'COMMIT' else GLOBAL_ABORT)
         else:
             self.logger.error("Inconsistent states detected, unable to terminate.")
 
+    def handle_state_from_new_coordinator(self, state_from_coordinator):
+        # Prüfe, ob eigener Zustand weiter fortgeschritten ist
+        state_order = ['INIT', 'READY', 'PRECOMMIT', 'COMMIT', 'ABORT']
+        my_index = state_order.index(self.state) if self.state in state_order else -1
+        sender_index = state_order.index(state_from_coordinator) if state_from_coordinator in state_order else -1
+
+        if my_index > sender_index:
+            # Ich bin schon weiter, ignoriere Nachricht
+            self.logger.info(f"Participant {self.participant}: Ignoring state from {self.coordinator} (already in later state: {self.state})")
+            return
+        elif my_index < sender_index:
+            # Ich bin zurück, übernehme Zustand von Koordinator
+            self.logger.info(f"Participant {self.participant}: Adopting state {state_from_coordinator} from new coordinator {self.coordinator}")
+            self._enter_state(state_from_coordinator)
+            # Sende Bestätigung an neuen Koordinator
+            self.channel.send_to(self.coordinator, self.state)
+        else:
+            # Gleicher Zustand, sende Bestätigung
+            self.logger.info(f"Participant {self.participant}: State matches new coordinator {self.coordinator}, confirming.")
+            self.channel.send_to(self.coordinator, self.state)
 
     def run(self):
         # Wait for start of joint commit
@@ -149,7 +175,6 @@ class Participant:
                     msg = self.channel.receive_from(self.coordinator, TIMEOUT)
                     if not msg:  
                         self.elect_new_coordinator()
-
                     elif msg[1] == 'GLOBAL_ABORT':
                         self._enter_state('ABORT')
                     else: 
@@ -159,7 +184,7 @@ class Participant:
                     # Ask all processes for their decisions
                     self.channel.send_to(self.all_participants, NEED_DECISION)
                     while True:
-                        msg = self.channel.receive_from_any()
+                        msg = self.channel.receive_from_any()                           #TODO: Fall, dass niemand die Entscheidung treffen kann -> Timeout einbauen
                         # If someone reports a final decision,
                         # we locally adjust to it
                         if msg[1] in [
